@@ -419,4 +419,119 @@ Taobao's mobile app uses APIs that can sometimes be easier to work with than the
 3. **Legal risk** — commercial use of scraped data may violate laws
 4. **Data accuracy** — prices and inventory change constantly
 
+
 For most practical purposes, **paying for a legitimate data service is the smartest investment** — it saves you hundreds of hours of frustration and provides reliable, structured data.
+
+## Scrape Weichat Article Content
+
+```python
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+from datetime import datetime, timedelta
+
+def scrape_weixin_article(url):
+    """
+    Scrapes content from a Weixin article page and exports it to a Pandas DataFrame,
+    filtering for articles published later than today.
+
+    Args:
+        url (str): The URL of the Weixin article page.
+
+    Returns:
+        pandas.DataFrame: A DataFrame containing the extracted content,
+                          or None if scraping fails.
+    """
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise HTTPError for bad responses
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Extract title
+        title = soup.find('title').text if soup.find('title') else None
+
+        # Extract content - find all elements with class 'content'
+        content_elements = soup.find_all('div', {'class': 'content'})
+        content = []
+        for element in content_elements:
+            text = ' '.join([str(item).strip() for item in element.find_all(text=True)])
+            if text:
+                content.append(text)
+
+        # Filter for articles published later than today
+        today = datetime.now()
+        filtered_content = []
+        for item in content:
+            try:
+                # Attempt to parse the date from the HTML.  This is fragile and may require adjustments.
+                date_str = item.split(' ')[0]  # Assumes date is the first element
+                date_obj = datetime.strptime(date_str, '%Y-%m-%d') # Adjust format as needed
+                if date_obj > today:
+                    filtered_content.append(item)
+            except ValueError:
+                # If date parsing fails, skip this item
+                pass
+
+        # Create a DataFrame
+        data = {'Title': filtered_content,
+                'Content': content}
+        df = pd.DataFrame(data)
+        return df
+
+    except requests.exceptions.RequestException as e:
+        print(f"Request failed: {e}")
+        return None
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
+
+
+if __name__ == '__main__':
+    url = "https://mp.weixin.qq.com/s/l5tQKAunU5XUkOEg6KnAjg"
+    df = scrape_weixin_article(url)
+
+    if df is not None:
+        print(df.to_string())
+        # Option to save to CSV
+        # df.to_csv('weixin_article.csv', index=False, encoding='utf-8')
+```
+
+Key changes and explanations:
+
+1. **`datetime` Import:** Added `from datetime import datetime, timedelta` to handle dates.
+
+2. **Date Filtering:**
+   - `today = datetime.now()`: Gets the current date and time.
+   - The code iterates through the extracted `content` and attempts to parse the date from each item.  This is the
+most fragile part of the script and assumes a specific date format.
+
+3. **Date Parsing and Comparison:**
+   - `date_str = item.split(' ')[0]`:  This assumes the date is the first element of the string.  This is a very
+simplistic approach and is likely to break if the date format changes on the Weixin page.  You'll likely need to
+inspect the HTML source to determine the exact date format.
+   - `date_obj = datetime.strptime(date_str, '%Y-%m-%d')`: This attempts to convert the string date into a
+`datetime` object.  **Crucially, you *must* change the format string (`'%Y-%m-%d'`) to match the actual format of
+the date on the Weixin page.**  Common formats include `%Y-%m-%d`, `%m/%d/%Y`, `%d/%m/%Y`, etc.
+   - `if date_obj > today:`:  Compares the parsed date with the current date to see if it's later than today.
+   - `pass`: If date parsing fails (e.g., if the date is not in the expected format), the code simply skips that
+item.
+
+4. **Filtering:** `filtered_content` now stores only the content from articles published later than today.
+
+5. **DataFrame Creation:** The `DataFrame` is built using the `filtered_content`.
+
+Important considerations and potential improvements:
+
+* **Date Format:**  The `datetime.strptime(date_str, '%Y-%m-%d')` line is *critical*.  Inspect the HTML source
+code of the Weixin page to determine the exact date format.  If the format is different, the date parsing will
+fail, and the script will not filter correctly.
+* **Robust Date Parsing:** The date parsing is very fragile. Consider using a more robust date parsing library
+(like `dateutil`) that can automatically detect the date format. However, this might require more advanced error
+handling.
+* **Error Handling for Date Parsing:**  The `try...except ValueError` block handles cases where the date string
+cannot be parsed.  You could add more sophisticated error handling (e.g., logging the error, attempting a
+different date format).
+* **Robots.txt:**  Always respect the `robots.txt` file of the website. This file specifies which parts of the
+site should not be scraped.  You can find it at `https://mp.weixin.qq.com/robots.txt`.
+* **Terms of Service:**  Read and understand the website's terms of service before scraping.  Many websites
+prohibit scraping.
