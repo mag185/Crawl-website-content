@@ -487,7 +487,7 @@ def scrape_weixin_article(url):
 
 
 if __name__ == '__main__':
-    url = "https://mp.weixin.qq.com/s/l5tQKAunU5XUkOEg6KnAjg"
+    url = "https://mp.weixin.qq.com/s/"
     df = scrape_weixin_article(url)
 
     if df is not None:
